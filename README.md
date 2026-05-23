@@ -16,6 +16,7 @@ In enterprise banking and fintech applications, simple static face recognition i
 
 The pipeline isolates camera ingestion, mathematical geometric processing, relational persistence, and the visual SOC monitoring environment.
 
+```mermaid
 graph TD
     subgraph Ingestion_Layer [Optical Acquisition]
         CAM[(High-Fidelity Sensor / Driver Bridge)] -->|Raw 720p 30FPS Matrix| CAP[OpenCV Video Capture]
@@ -25,18 +26,16 @@ graph TD
         CAP -->|Frame Downscaling 480p| REG[RGB Frame Buffer]
         REG -->|Tensor Processing| MP{MediaPipe Face Mesh Core}
         MP -->|468 Vector Coordinates| CNV[Isolated Black Canvas Generator]
-
-        REG -->|Matrix Concatenation| SPL[Split-Screen Matrix Raw and Mesh]
-        CNV -->|Matrix Concatenation| SPL
+        REG & CNV -->|Matrix Concatenation| SPL[Split-Screen Matrix: Raw | Mesh]
     end
 
     subgraph Storage_Layer [Distributed Persistence]
-        SPL -->|State Trigger Verified Face| VWR[cv2.VideoWriter Encoder]
-        VWR -->|3-Second Clip mp4| VLT[(evidence_vault Directory)]
-        VWR -->|pyodbc Relational Metadata| SQL[(SQL Server BiometricAudit Table)]
+        SPL -->|State Trigger: Verified Face| VWR[cv2.VideoWriter Encoder]
+        VWR -->|3-Second Clip .mp4| VLT[(evidence_vault/ Directory)]
+        VWR -->|pyodbc Relational Metadata| SQL[(SQL Server: BiometricAudit Table)]
     end
 
-    subgraph Security_Operations [Telemetry and Audit Presentation]
+    subgraph Security_Operations [Telemetry & Audit Presentation]
         SQL -->|SQL Ingestion Query| ST[Streamlit SOC UI]
         VLT -->|Local Video Stream Load| ST
         ST -->|High-Density Dynamic Table| SOC[Auditor Workspace Monitor]
@@ -45,11 +44,11 @@ graph TD
     classDef database fill:#1B4F72,stroke:#fff,stroke-width:2px,color:#fff;
     classDef engine fill:#4A235A,stroke:#fff,stroke-width:2px,color:#fff;
     classDef display fill:#78281F,stroke:#fff,stroke-width:2px,color:#fff;
-
+    
     class SQL database;
     class CAP,REG,MP,CNV,SPL,VWR engine;
     class ST,SOC display;
-    
+```
 ## 4. Technical Specification & Optimization
 ##### **4.1. Real-Time Matrix Manipulations (`vision_engine.py`)**
 * **Matrix Concatenation:** To eliminate front-end overhead, the core engine clones the downscaled frame buffer and applies mathematical matrix joining via cv2.hconcat(). The left block handles the raw RGB matrix, and the right block structures a dark tensor np.zeros() where the 468 landmarks are explicitly plotted.
