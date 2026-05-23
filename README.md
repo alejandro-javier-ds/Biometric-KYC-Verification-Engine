@@ -26,7 +26,9 @@ graph TD
         CAP -->|Frame Downscaling 480p| REG[RGB Frame Buffer]
         REG -->|Tensor Processing| MP{MediaPipe Face Mesh Core}
         MP -->|468 Vector Coordinates| CNV[Isolated Black Canvas Generator]
-        REG & CNV -->|Matrix Concatenation| SPL[Split-Screen Matrix: Raw | Mesh]
+
+        REG -->|Matrix Concatenation| SPL[Split-Screen Matrix: Raw and Mesh]
+        CNV -->|Matrix Concatenation| SPL
     end
 
     subgraph Storage_Layer [Distributed Persistence]
