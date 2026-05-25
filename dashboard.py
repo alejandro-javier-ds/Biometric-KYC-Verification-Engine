@@ -1,56 +1,74 @@
 import streamlit as st
 import os
+import pyodbc
+import pandas as pd
+from config import get_pyodbc_string
+from vision_engine import run_live_sensor
 
-st.set_page_config(page_title="Sentinel KYC | SOC Dashboard", layout="wide")
+st.set_page_config(page_title="Sentinel SOC | Modular Engine", layout="wide")
 
-def fetch_system_logs(log_dir: str, lines: int = 15) -> str:
-    if not os.path.exists(log_dir):
-        return "SYS_WARN: Audit directory offline or not found."
-    
-    log_files = [f for f in os.listdir(log_dir) if f.endswith(".log")]
-    if not log_files:
-        return "SYS_WARN: No audit logs available."
-        
-    latest_log = max([os.path.join(log_dir, f) for f in log_files], key=os.path.getctime)
+VAULT_DIR = "evidence_vault"
+
+@st.cache_data(ttl=2)
+def fetch_audit_telemetry() -> pd.DataFrame:
     try:
-        with open(latest_log, "r") as f:
-            return "".join(f.readlines()[-lines:])
-    except Exception as e:
-        return f"SYS_ERROR: Log parsing failed. {str(e)}"
+        conn = pyodbc.connect(get_pyodbc_string())
+        query = """
+            SELECT EventID, CaptureTimestamp, VerificationStatus, ConfidenceScore, 
+                   RawVideoFilename, MeshVideoFilename, HardwareSource
+            FROM BiometricAudit ORDER BY CaptureTimestamp DESC
+        """
+        df = pd.read_sql(query, conn)
+        conn.close()
+        return df
+    except Exception:
+        return pd.DataFrame()
 
-def initialize_soc_dashboard() -> None:
-    st.title("Sentinel: Enterprise Biometric Audit & KYC")
-    st.markdown("---")
+st.title("Sentinel: Modular Biometric Verification SOC")
+st.markdown("---")
+
+tab1, tab2 = st.tabs(["Live Biometric Sensor", "Forensic Evidence Vault"])
+
+with tab1:
+    st.markdown("### Escaner Optico Integrado")
+    if st.button("Encender Motor de Vision", type="primary"):
+        video_placeholder = st.empty()
+        run_live_sensor(video_placeholder)
+        st.success("EVIDENCIA CAPTURADA. Sincronizando con Base de Datos...")
+        st.rerun()
+
+with tab2:
+    st.markdown("### Historial de Auditorias")
+    df = fetch_audit_telemetry()
     
-    vault_dir = "evidence_vault"
-    log_dir = "audit_logs"
-    
-    col_vault, col_telemetry = st.columns([0.7, 0.3])
-
-    with col_vault:
-        st.subheader("Biometric Evidence Vault")
-        if os.path.exists(vault_dir):
-            evidence_files = [f for f in os.listdir(vault_dir) if f.endswith(".mp4")]
-            evidence_files.sort(key=lambda x: os.path.getctime(os.path.join(vault_dir, x)), reverse=True)
+    if df.empty:
+        st.info("La boveda esta vacia. Ve a la primera pestana y captura tu rostro.")
+    else:
+        for index, row in df.iterrows():
+            status_icon = "SUCCESS" if row['VerificationStatus'] == 'SUCCESS' else "FAILED"
+            confidence_pct = row['ConfidenceScore'] * 100
             
-            if evidence_files:
-                grid = st.columns(3)
-                for idx, video_file in enumerate(evidence_files[:12]):
-                    with grid[idx % 3]:
-                        st.video(os.path.join(vault_dir, video_file))
-                        st.caption(f"AUDIT ID: {video_file}")
-            else:
-                st.info("SYSTEM_IDLE: Awaiting biometric telemetry streams.")
-        else:
-            st.warning("SYSTEM_FAULT: Evidence vault directory offline.")
-            
-    with col_telemetry:
-        st.subheader("System Telemetry & Logs")
-        logs = fetch_system_logs(log_dir)
-        st.code(logs, language="log")
-        
-        if st.button("Refresh Telemetry"):
-            st.rerun()
+            with st.expander(f"[{status_icon}] AUDIT ID: #{row['EventID']} | MATCH: {confidence_pct:.2f}% | DATE: {row['CaptureTimestamp']}"):
+                vid_col1, vid_col2, meta_col = st.columns([0.4, 0.4, 0.2])
+                
+                raw_path = os.path.join(VAULT_DIR, row['RawVideoFilename'])
+                mesh_path = os.path.join(VAULT_DIR, row['MeshVideoFilename'])
 
-if __name__ == "__main__":
-    initialize_soc_dashboard()
+                with vid_col1:
+                    st.caption("OPTICAL SENSOR (RAW)")
+                    if os.path.exists(raw_path):
+                        st.video(raw_path)
+                    else:
+                        st.error("Archivo no encontrado")
+
+                with vid_col2:
+                    st.caption("BIOMETRIC MESH (ALGORITHMIC)")
+                    if os.path.exists(mesh_path):
+                        st.video(mesh_path)
+                    else:
+                        st.error("Archivo no encontrado")
+
+                with meta_col:
+                    st.markdown("**Telemetry Data**")
+                    st.markdown(f"- **Event ID:** `#{row['EventID']}`")
+                    st.markdown(f"- **Confidence:** `{row['ConfidenceScore']}`")
